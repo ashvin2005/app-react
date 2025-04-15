@@ -12,8 +12,11 @@ services:
         value: 3.11.0
       - key: NODE_VERSION
         value: 18.17.0
+      - key: NODE_ENV
+        value: production
     healthCheckPath: /health
     autoDeploy: true
+    plan: free
     scaling:
       minInstances: 1
       maxInstances: 3

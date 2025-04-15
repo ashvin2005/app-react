@@ -46,13 +46,13 @@ app.add_middleware(
 
 # Build the frontend
 def build_frontend():
-    if not IS_PRODUCTION:
-        try:
-            subprocess.run(["npm", "run", "build"], check=True)
-            print("Frontend built successfully")
-        except subprocess.CalledProcessError as e:
-            print(f"Error building frontend: {e}")
-            raise
+    try:
+        subprocess.run(["npm", "install"], check=True)
+        subprocess.run(["npm", "run", "build"], check=True)
+        print("Frontend built successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"Error building frontend: {e}")
+        raise
 
 # Data Models
 class Shift(BaseModel):
@@ -130,12 +130,14 @@ async def cancel_shift(shift_id: UUID):
 # Mount the static files
 @app.on_event("startup")
 async def startup_event():
-    if not IS_PRODUCTION:
-        # Build the frontend only in development
-        build_frontend()
+    # Build the frontend
+    build_frontend()
     
-    # Mount the static files with cache headers
+    # Mount the static files
     static_dir = "dist" if os.path.exists("dist") else "build"
+    if not os.path.exists(static_dir):
+        raise RuntimeError(f"Frontend build directory '{static_dir}' not found after build")
+    
     app.mount(
         "/",
         StaticFiles(
