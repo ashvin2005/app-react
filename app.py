@@ -4,6 +4,10 @@ from typing import List, Optional
 from uuid import UUID, uuid4
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+import subprocess
 
 app = FastAPI(title="Shift Booking API")
 
@@ -15,6 +19,15 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+# Build the frontend
+def build_frontend():
+    try:
+        subprocess.run(["npm", "run", "build"], check=True)
+        print("Frontend built successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"Error building frontend: {e}")
+        raise
 
 # Data Models
 class Shift(BaseModel):
@@ -89,14 +102,19 @@ async def cancel_shift(shift_id: UUID):
     shift.booked = False
     return shift
 
-# Create Indian-specific demo shifts
+# Mount the static files
 @app.on_event("startup")
 async def startup_event():
+    # Build the frontend
+    build_frontend()
+    
+    # Mount the static files
+    app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+    
+    # Create demo shifts
     global shifts
-    # Get current time in milliseconds
     current_time = int(datetime.now().timestamp() * 1000)
     
-    # Create shifts for different Indian cities
     shifts = [
         # Mumbai shifts
         Shift(
