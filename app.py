@@ -6,28 +6,53 @@ from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 import os
 import subprocess
+from dotenv import load_dotenv
 
-app = FastAPI(title="Shift Booking API")
+# Load environment variables
+load_dotenv()
 
-# Add CORS middleware
+# Determine if we're in production
+IS_PRODUCTION = os.getenv("RENDER", "false").lower() == "true"
+
+app = FastAPI(
+    title="Shift Booking API",
+    docs_url="/api/docs" if IS_PRODUCTION else "/docs",
+    redoc_url="/api/redoc" if IS_PRODUCTION else "/redoc",
+    openapi_url="/api/openapi.json" if IS_PRODUCTION else "/openapi.json"
+)
+
+# Add security middleware
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"] if not IS_PRODUCTION else [os.getenv("HOST", "localhost")]
+)
+
+# Add compression middleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Add CORS middleware with production settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=["*"] if not IS_PRODUCTION else [os.getenv("FRONTEND_URL", "http://localhost:3000")],
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 # Build the frontend
 def build_frontend():
-    try:
-        subprocess.run(["npm", "run", "build"], check=True)
-        print("Frontend built successfully")
-    except subprocess.CalledProcessError as e:
-        print(f"Error building frontend: {e}")
-        raise
+    if not IS_PRODUCTION:
+        try:
+            subprocess.run(["npm", "run", "build"], check=True)
+            print("Frontend built successfully")
+        except subprocess.CalledProcessError as e:
+            print(f"Error building frontend: {e}")
+            raise
 
 # Data Models
 class Shift(BaseModel):
@@ -105,11 +130,21 @@ async def cancel_shift(shift_id: UUID):
 # Mount the static files
 @app.on_event("startup")
 async def startup_event():
-    # Build the frontend
-    build_frontend()
+    if not IS_PRODUCTION:
+        # Build the frontend only in development
+        build_frontend()
     
-    # Mount the static files
-    app.mount("/", StaticFiles(directory="dist", html=True), name="static")
+    # Mount the static files with cache headers
+    static_dir = "dist" if os.path.exists("dist") else "build"
+    app.mount(
+        "/",
+        StaticFiles(
+            directory=static_dir,
+            html=True,
+            check_dir=True
+        ),
+        name="static"
+    )
     
     # Create demo shifts
     global shifts
@@ -168,4 +203,9 @@ async def startup_event():
             position="Junior Nurse",
             department="Pediatrics"
         )
-    ] 
+    ]
+
+# Add health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"} 
