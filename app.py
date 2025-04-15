@@ -47,11 +47,20 @@ app.add_middleware(
 # Build the frontend
 def build_frontend():
     try:
+        # Install dependencies
         subprocess.run(["npm", "install"], check=True)
-        subprocess.run(["npm", "run", "build"], check=True)
+        
+        # Check if Vite is installed in node_modules
+        if not os.path.exists("node_modules/.bin/vite"):
+            print("Vite not found in node_modules, installing...")
+            subprocess.run(["npm", "install", "vite", "--save-dev"], check=True)
+        
+        # Build the frontend using npx to ensure we use the local vite
+        subprocess.run(["npx", "vite", "build"], check=True)
         print("Frontend built successfully")
     except subprocess.CalledProcessError as e:
         print(f"Error building frontend: {e}")
+        print(f"Error output: {e.output.decode() if e.output else 'No output'}")
         raise
 
 # Data Models
